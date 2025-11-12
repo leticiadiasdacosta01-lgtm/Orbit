@@ -47,7 +47,7 @@ export async function buildApp() {
   await app.register(redis, {
     host: env.REDIS_HOST,
     port: env.REDIS_PORT,
-    password: env.REDIS_PASSWORD,
+    ...(env.REDIS_PASSWORD && { password: env.REDIS_PASSWORD }),
   })
 
   // Global hooks
