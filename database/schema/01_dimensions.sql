@@ -1,0 +1,36 @@
+CREATE TABLE IF NOT EXISTS dim_date (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date DATE NOT NULL UNIQUE,
+    year INTEGER NOT NULL,
+    month INTEGER NOT NULL,
+    day INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS dim_company (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS dim_cost_center (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL,
+    name TEXT NOT NULL,
+    company_id INTEGER NOT NULL,
+    CONSTRAINT uq_cost_center_code_company UNIQUE (code, company_id),
+    FOREIGN KEY (company_id) REFERENCES dim_company(id)
+);
+
+CREATE TABLE IF NOT EXISTS dim_account (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    type TEXT
+);
+
+CREATE TABLE IF NOT EXISTS dim_indicator (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    unit TEXT
+);
