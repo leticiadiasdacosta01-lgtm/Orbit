@@ -1,0 +1,695 @@
+// Orbit ERP - Database Schema
+// PostgreSQL 16+ with Prisma ORM
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [uuidOssp(map: "uuid-ossp"), pgTrgm]
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  SUPER_ADMIN // Equipe Orbit
+  COMPANY_ADMIN // Admin da empresa
+  HR_MANAGER // Gestor de RH
+  MANAGER // Gestor de equipe
+  EMPLOYEE // Colaborador
+}
+
+enum TaxRegime {
+  SIMPLES_NACIONAL
+  LUCRO_PRESUMIDO
+  LUCRO_REAL
+}
+
+enum ContractType {
+  CLT
+  PJ
+  INTERNSHIP // Estágio
+  TEMPORARY // Temporário
+  INTERMITTENT // Intermitente
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  ON_VACATION // Em férias
+  ON_LEAVE // Afastado
+  TERMINATED // Desligado
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_SAY
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+  STABLE_UNION
+}
+
+enum RecordType {
+  ENTRY // Entrada
+  LUNCH_OUT // Saída almoço
+  LUNCH_IN // Retorno almoço
+  EXIT // Saída
+  OVERTIME_ENTRY // Entrada hora extra
+  OVERTIME_EXIT // Saída hora extra
+}
+
+enum RecordSource {
+  WEB
+  MOBILE
+  BIOMETRIC
+  MANUAL // Ajuste manual
+}
+
+enum AdjustmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PayrollStatus {
+  DRAFT // Rascunho
+  CALCULATING // Calculando
+  CALCULATED // Calculada
+  APPROVED // Aprovada
+  PAID // Paga
+  CANCELLED // Cancelada
+}
+
+enum TaxType {
+  INSS
+  IRRF
+  FGTS
+}
+
+enum BenefitType {
+  TRANSPORT_VOUCHER // Vale-transporte
+  MEAL_VOUCHER // Vale-refeição
+  FOOD_VOUCHER // Vale-alimentação
+  HEALTH_PLAN // Plano de saúde
+  DENTAL_PLAN // Plano odontológico
+  LIFE_INSURANCE // Seguro de vida
+  GYM // Academia
+  EDUCATION // Auxílio educação
+  DAYCARE // Auxílio creche
+  OTHER // Outros
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  VIEW
+  EXPORT
+  LOGIN
+  LOGOUT
+  CALCULATE_PAYROLL
+  APPROVE_PAYROLL
+  ADJUST_TIMECLOCK
+}
+
+// ============================================
+// MODELS - CORE
+// ============================================
+
+model Company {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  // Dados da empresa
+  name                  String
+  tradeName             String? // Nome fantasia
+  cnpj                  String  @unique
+  stateRegistration     String? // Inscrição estadual
+  municipalRegistration String? // Inscrição municipal
+
+  // Endereço
+  address       String
+  addressNumber String
+  complement    String?
+  neighborhood  String
+  city          String
+  state         String  @db.Char(2)
+  zipCode       String  @db.Char(8)
+
+  // Contato
+  phone   String
+  email   String
+  website String?
+
+  // Configurações
+  taxRegime        TaxRegime
+  riskLevel        Int     @default(1) // RAT: 1%, 2% ou 3%
+  paydayDay        Int     @default(5) // Dia do pagamento
+  workHoursPerDay  Decimal @default(8) @db.Decimal(4, 2)
+  workDaysPerWeek  Int     @default(5)
+  toleranceMinutes Int     @default(10)
+
+  // Customização
+  logo         String?
+  primaryColor String  @default("#3B82F6")
+
+  // Status
+  active      Boolean   @default(true)
+  trialEndsAt DateTime?
+  plan        String    @default("starter")
+
+  // Relacionamentos
+  users       User[]
+  employees   Employee[]
+  departments Department[]
+  roles       Role[]
+  payrolls    Payroll[]
+  benefits    Benefit[]
+
+  @@index([cnpj])
+  @@index([active])
+  @@map("companies")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  // Dados pessoais
+  name          String
+  email         String
+  emailVerified DateTime?
+  password      String // Hashed
+  avatar        String?
+
+  // Autenticação
+  role             UserRole @default(EMPLOYEE)
+  twoFactorEnabled Boolean  @default(false)
+  twoFactorSecret  String?
+
+  // Relacionamento com colaborador
+  employeeId String?   @unique
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+
+  // Status
+  active      Boolean   @default(true)
+  lastLoginAt DateTime?
+
+  // Relacionamentos
+  sessions  Session[]
+  auditLogs AuditLog[]
+
+  @@unique([companyId, email])
+  @@index([companyId, email])
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  token        String    @unique
+  refreshToken String?   @unique
+  expiresAt    DateTime
+  ipAddress    String?
+  userAgent    String?
+
+  @@index([userId])
+  @@index([token])
+  @@map("sessions")
+}
+
+// ============================================
+// MODELS - HR
+// ============================================
+
+model Department {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  name        String
+  description String?
+
+  // Hierarquia
+  parentId String?
+  parent   Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children Department[] @relation("DepartmentHierarchy")
+
+  managerId String?   @unique
+  manager   Employee? @relation("DepartmentManager", fields: [managerId], references: [id])
+
+  active Boolean @default(true)
+
+  employees Employee[]
+
+  @@index([companyId])
+  @@map("departments")
+}
+
+model Role {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  name        String
+  description String?
+  cboCode     String? // CBO (Classificação Brasileira de Ocupações)
+
+  active Boolean @default(true)
+
+  employees Employee[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@map("roles")
+}
+
+model Employee {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  // Identificação
+  registration String // Matrícula
+
+  // Dados pessoais
+  name          String
+  cpf           String
+  rg            String?
+  rgIssuer      String? // Órgão emissor
+  rgIssueDate   DateTime?
+  birthDate     DateTime
+  gender        Gender?
+  maritalStatus MaritalStatus?
+  nationality   String        @default("Brasileira")
+
+  // Contato
+  email         String?
+  phone         String?
+  personalEmail String?
+
+  // Endereço
+  address       String?
+  addressNumber String?
+  complement    String?
+  neighborhood  String?
+  city          String?
+  state         String? @db.Char(2)
+  zipCode       String? @db.Char(8)
+
+  // Dados contratuais
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id])
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  managedDepartment Department? @relation("DepartmentManager")
+
+  contractType    ContractType
+  admissionDate   DateTime
+  terminationDate DateTime?
+
+  // Salário
+  salary     Decimal @db.Decimal(10, 2)
+  salaryType String  @default("MONTHLY") // MONTHLY, HOURLY
+
+  // Jornada
+  workSchedule Json? // Horários por dia da semana
+
+  // Benefícios fiscais
+  dependents      Int     @default(0)
+  hasSpecialNeeds Boolean @default(false)
+
+  // Banco (para pagamento)
+  bankCode        String?
+  bankAgency      String?
+  bankAccount     String?
+  bankAccountType String? // CHECKING, SAVINGS
+  pixKey          String?
+
+  // Documentos
+  ctpsNumber        String? // Carteira de trabalho
+  ctpsSeries        String?
+  pisPasep          String?
+  voterRegistration String?
+
+  // Fotos e documentos
+  photo     String?
+  documents Json? // Array de URLs
+
+  // Status
+  status EmployeeStatus @default(ACTIVE)
+
+  // Relacionamentos
+  user             User?
+  managerId        String?
+  manager          Employee?          @relation("EmployeeManager", fields: [managerId], references: [id])
+  subordinates     Employee[]         @relation("EmployeeManager")
+  timeclockRecords TimeclockRecord[]
+  payrollEntries   PayrollEntry[]
+  dependentsList   Dependent[]
+  employeeBenefits EmployeeBenefit[]
+
+  @@unique([companyId, cpf])
+  @@unique([companyId, registration])
+  @@index([companyId, status])
+  @@index([companyId, departmentId])
+  @@map("employees")
+}
+
+model Dependent {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  name         String
+  cpf          String?
+  birthDate    DateTime
+  relationship String // FILHO, CONJUGE, ENTEADO, etc.
+
+  // Para IRRF
+  isIrrfDependent Boolean @default(true)
+
+  // Para plano de saúde
+  includeInHealthPlan Boolean @default(false)
+
+  @@index([employeeId])
+  @@map("dependents")
+}
+
+// ============================================
+// MODELS - TIMECLOCK
+// ============================================
+
+model TimeclockRecord {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  companyId String
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  timestamp DateTime
+  type      RecordType
+  source    RecordSource @default(WEB)
+
+  // Metadados
+  ipAddress  String?
+  location   Json? // { lat, lng, accuracy }
+  deviceInfo String?
+
+  // Ajuste
+  isAdjustment Boolean              @default(false)
+  adjustmentId String?              @unique
+  adjustment   TimeclockAdjustment? @relation(fields: [adjustmentId], references: [id])
+
+  @@index([companyId, employeeId, timestamp])
+  @@index([timestamp])
+  @@map("timeclock_records")
+}
+
+model TimeclockAdjustment {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId  String
+  employeeId String
+
+  // Dados da solicitação
+  date          DateTime
+  originalType  RecordType
+  requestedTime DateTime
+  justification String
+  attachment    String?
+
+  // Aprovação
+  status        AdjustmentStatus @default(PENDING)
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  reviewComment String?
+
+  // Relacionamento com registro criado
+  record TimeclockRecord?
+
+  @@index([companyId, employeeId, status])
+  @@map("timeclock_adjustments")
+}
+
+// ============================================
+// MODELS - PAYROLL
+// ============================================
+
+model Payroll {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  // Período
+  referenceMonth DateTime // Primeiro dia do mês (2025-01-01)
+
+  // Status
+  status PayrollStatus @default(DRAFT)
+
+  // Totalizadores
+  totalEmployees    Int     @default(0)
+  totalGross        Decimal @default(0) @db.Decimal(12, 2)
+  totalNet          Decimal @default(0) @db.Decimal(12, 2)
+  totalInss         Decimal @default(0) @db.Decimal(12, 2)
+  totalIrrf         Decimal @default(0) @db.Decimal(12, 2)
+  totalFgts         Decimal @default(0) @db.Decimal(12, 2)
+  totalEmployerInss Decimal @default(0) @db.Decimal(12, 2)
+
+  // Auditoria
+  calculatedAt DateTime?
+  calculatedBy String?
+  approvedAt   DateTime?
+  approvedBy   String?
+  paidAt       DateTime?
+
+  // Relacionamentos
+  entries PayrollEntry[]
+
+  @@unique([companyId, referenceMonth])
+  @@index([companyId, status])
+  @@map("payrolls")
+}
+
+model PayrollEntry {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payrollId String
+  payroll   Payroll @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  // Proventos (earnings)
+  baseSalary    Decimal @db.Decimal(10, 2)
+  overtime50    Decimal @default(0) @db.Decimal(10, 2)
+  overtime100   Decimal @default(0) @db.Decimal(10, 2)
+  nightShift    Decimal @default(0) @db.Decimal(10, 2)
+  commission    Decimal @default(0) @db.Decimal(10, 2)
+  bonus         Decimal @default(0) @db.Decimal(10, 2)
+  dangerPay     Decimal @default(0) @db.Decimal(10, 2) // Periculosidade
+  unhealthyPay  Decimal @default(0) @db.Decimal(10, 2) // Insalubridade
+  otherEarnings Json? // Array de { description, value }
+
+  // Descontos (deductions)
+  inss             Decimal @db.Decimal(10, 2)
+  irrf             Decimal @db.Decimal(10, 2)
+  transportVoucher Decimal @default(0) @db.Decimal(10, 2)
+  mealVoucher      Decimal @default(0) @db.Decimal(10, 2)
+  healthPlan       Decimal @default(0) @db.Decimal(10, 2)
+  dentalPlan       Decimal @default(0) @db.Decimal(10, 2)
+  lifeInsurance    Decimal @default(0) @db.Decimal(10, 2)
+  absence          Decimal @default(0) @db.Decimal(10, 2)
+  advancePayment   Decimal @default(0) @db.Decimal(10, 2)
+  otherDeductions  Json? // Array de { description, value }
+
+  // Totais calculados
+  grossSalary     Decimal @db.Decimal(10, 2)
+  totalDeductions Decimal @db.Decimal(10, 2)
+  netSalary       Decimal @db.Decimal(10, 2)
+
+  // Encargos (employer costs)
+  fgts         Decimal @db.Decimal(10, 2)
+  employerInss Decimal @db.Decimal(10, 2)
+  rat          Decimal @default(0) @db.Decimal(10, 2) // Risco Ambiental Trabalho
+  thirdParties Decimal @default(0) @db.Decimal(10, 2) // Sistema S
+
+  // Provisões
+  vacationProvision   Decimal @db.Decimal(10, 2)
+  thirteenthProvision Decimal @db.Decimal(10, 2)
+
+  // Bases de cálculo
+  inssBase Decimal @db.Decimal(10, 2)
+  irrfBase Decimal @db.Decimal(10, 2)
+  fgtsBase Decimal @db.Decimal(10, 2)
+
+  // Holerite
+  payslipUrl String?
+  sentAt     DateTime?
+
+  @@unique([payrollId, employeeId])
+  @@index([payrollId])
+  @@index([employeeId])
+  @@map("payroll_entries")
+}
+
+// ============================================
+// MODELS - TAX TABLES
+// ============================================
+
+model TaxTable {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  type      TaxType
+  startDate DateTime
+  endDate   DateTime?
+
+  // Brackets (faixas)
+  brackets Json // Array de { upTo, rate, deduction }
+
+  @@index([type, startDate])
+  @@map("tax_tables")
+}
+
+// ============================================
+// MODELS - BENEFITS
+// ============================================
+
+model Benefit {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  type        BenefitType
+  name        String
+  description String?
+
+  // Valores
+  fixedValue      Decimal? @db.Decimal(10, 2)
+  percentageValue Decimal? @db.Decimal(5, 2)
+
+  // Desconto do colaborador
+  employeeDiscountPercentage Decimal? @db.Decimal(5, 2)
+  employeeFixedDiscount      Decimal? @db.Decimal(10, 2)
+
+  // Elegibilidade
+  eligibilityRules Json? // { departments: [], roles: [], contractTypes: [] }
+
+  // Provider
+  providerName    String?
+  providerContact String?
+
+  active Boolean @default(true)
+
+  employeeBenefits EmployeeBenefit[]
+
+  @@index([companyId, active])
+  @@map("benefits")
+}
+
+model EmployeeBenefit {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  benefitId String
+  benefit   Benefit @relation(fields: [benefitId], references: [id])
+
+  // Valores específicos (override do benefício)
+  customValue    Decimal? @db.Decimal(10, 2)
+  customDiscount Decimal? @db.Decimal(10, 2)
+
+  // Dependentes inclusos
+  includeDependents Boolean @default(false)
+  dependentsCount   Int     @default(0)
+
+  startDate DateTime
+  endDate   DateTime?
+
+  active Boolean @default(true)
+
+  @@unique([employeeId, benefitId])
+  @@index([employeeId])
+  @@map("employee_benefits")
+}
+
+// ============================================
+// MODELS - AUDIT
+// ============================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  companyId String
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  action   AuditAction
+  entity   String // Employee, Payroll, etc.
+  entityId String
+
+  // Dados alterados
+  oldValues Json?
+  newValues Json?
+
+  ipAddress String?
+  userAgent String?
+
+  @@index([companyId, createdAt])
+  @@index([userId])
+  @@index([entity, entityId])
+  @@map("audit_logs")
+}

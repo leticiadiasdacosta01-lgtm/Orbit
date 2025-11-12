@@ -1,0 +1,62 @@
+{
+  "name": "orbit-erp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema ERP completo para gestão de Recursos Humanos",
+  "keywords": [
+    "erp",
+    "rh",
+    "folha-de-pagamento",
+    "ponto-eletronico",
+    "gestao-rh"
+  ],
+  "author": "Orbit Team",
+  "license": "MIT",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./apps/**\" dev",
+    "dev:web": "pnpm --filter @orbit/web dev",
+    "dev:api": "pnpm --filter @orbit/api dev",
+    "build": "pnpm --recursive --filter \"./apps/**\" build",
+    "build:web": "pnpm --filter @orbit/web build",
+    "build:api": "pnpm --filter @orbit/api build",
+    "start": "pnpm --parallel --filter \"./apps/**\" start",
+    "start:web": "pnpm --filter @orbit/web start",
+    "start:api": "pnpm --filter @orbit/api start",
+    "lint": "pnpm --recursive lint",
+    "lint:fix": "pnpm --recursive lint:fix",
+    "type-check": "pnpm --recursive type-check",
+    "test": "pnpm --recursive test",
+    "test:coverage": "pnpm --recursive test:coverage",
+    "test:e2e": "pnpm --filter @orbit/web test:e2e",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "clean": "pnpm --recursive clean && rm -rf node_modules",
+    "db:generate": "pnpm --filter @orbit/database db:generate",
+    "db:migrate": "pnpm --filter @orbit/database db:migrate",
+    "db:seed": "pnpm --filter @orbit/database db:seed",
+    "db:studio": "pnpm --filter @orbit/database db:studio",
+    "db:push": "pnpm --filter @orbit/database db:push",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "eslint": "^8.56.0",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.1.1",
+    "turbo": "^1.11.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0"
+}
