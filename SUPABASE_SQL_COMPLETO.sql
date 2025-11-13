@@ -1,12 +1,12 @@
 -- ============================================
--- ORBIT ERP - SQL COMPLETO PARA SUPABASE
+-- ORBIT ERP - SQL COMPLETO PARA SUPABASE (CORRIGIDO)
 -- ============================================
 -- Execute este SQL inteiro no SQL Editor do Supabase
 -- https://supabase.com/dashboard/project/darrtoexfebfbmzyubxf/sql/new
 -- ============================================
 
 -- CreateExtension
-CREATE EXTENSION IF NOT EXISTS "pgTrgm";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- CreateExtension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
