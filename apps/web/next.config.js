@@ -11,13 +11,8 @@ const nextConfig = {
 
   // Image optimization
   images: {
-    domains: ['localhost'],
+    domains: ['localhost', 'darrtoexfebfbmzyubxf.supabase.co'],
     formats: ['image/avif', 'image/webp'],
-  },
-
-  // Experimental features
-  experimental: {
-    serverActions: true,
   },
 }
 
